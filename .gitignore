@@ -1,0 +1,16 @@
+# Private Cloudflare credentials and personal contact details
+config.py
+
+# Python environments and generated files
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
