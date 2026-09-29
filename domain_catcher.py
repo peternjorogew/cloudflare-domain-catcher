@@ -16,6 +16,9 @@ try:
         CHECK_INTERVAL_SECONDS,
         AUTO_RENEW,
         PRIVACY_MODE,
+        TELEGRAM_BOT_TOKEN,
+        TELEGRAM_CHAT_ID,
+        STATUS_INTERVAL_SECONDS,
         SANDBOX_TEST_DOMAIN,
         SANDBOX_CONTACT,
     )
@@ -31,6 +34,31 @@ def log(message: str) -> None:
     """Print a timestamped log message."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
+
+
+class TelegramNotifier:
+    """Send best-effort status alerts without interrupting registration."""
+
+    def __init__(self) -> None:
+        self.enabled = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+        self.url = (
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        )
+
+    def send(self, message: str) -> None:
+        if not self.enabled:
+            return
+
+        try:
+            response = requests.post(
+                self.url,
+                json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
+                timeout=15,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            # Alerts must never block or duplicate a registration attempt.
+            log(f"Telegram notification failed: {type(exc).__name__}")
 
 
 def parse_args():
@@ -73,6 +101,9 @@ def validate_config(sandbox: bool) -> None:
         raise ValueError(
             "CHECK_INTERVAL_SECONDS must be at least 1 second."
         )
+
+    if STATUS_INTERVAL_SECONDS < 60:
+        raise ValueError("STATUS_INTERVAL_SECONDS must be at least 60 seconds.")
 
     # Decimal is used instead of float for safer money comparisons.
     try:
@@ -290,7 +321,10 @@ def validate_registration_candidate(
     return price
 
 
-def run_sandbox(registrar: CloudflareRegistrar) -> None:
+def run_sandbox(
+    registrar: CloudflareRegistrar,
+    notifier: TelegramNotifier,
+) -> None:
     """
     Test the full check -> validate -> register flow safely.
 
@@ -309,6 +343,7 @@ def run_sandbox(registrar: CloudflareRegistrar) -> None:
     log("=" * 60)
     log("No real domain will be registered.")
     log("No money will be charged.")
+    notifier.send("Domain Catcher sandbox test started. No real domain will be registered.")
     log(f"Testing domain: {domain}")
     log("")
 
@@ -350,6 +385,7 @@ def run_sandbox(registrar: CloudflareRegistrar) -> None:
         log("=" * 60)
         log("SANDBOX TEST PASSED")
         log("=" * 60)
+        notifier.send("Domain Catcher sandbox test passed.")
         return
 
     raise RuntimeError(
@@ -357,7 +393,10 @@ def run_sandbox(registrar: CloudflareRegistrar) -> None:
     )
 
 
-def run_production(registrar: CloudflareRegistrar) -> None:
+def run_production(
+    registrar: CloudflareRegistrar,
+    notifier: TelegramNotifier,
+) -> None:
     """
     Continuously monitor the real domain.
 
@@ -387,6 +426,12 @@ def run_production(registrar: CloudflareRegistrar) -> None:
     log("Press Ctrl+C to stop.")
     log("")
 
+    notifier.send(
+        f"Domain Catcher started for {domain}. "
+        f"I will report status every {STATUS_INTERVAL_SECONDS // 60} minutes."
+    )
+    next_status_at = time.monotonic() + STATUS_INTERVAL_SECONDS
+
     while True:
         try:
             # Poll Cloudflare until the domain becomes registrable.
@@ -402,6 +447,13 @@ def run_production(registrar: CloudflareRegistrar) -> None:
                     f"{domain} unavailable "
                     f"({reason})"
                 )
+
+                if time.monotonic() >= next_status_at:
+                    notifier.send(
+                        f"Still monitoring {domain}. "
+                        f"Current status: unavailable ({reason})."
+                    )
+                    next_status_at = time.monotonic() + STATUS_INTERVAL_SECONDS
 
                 time.sleep(CHECK_INTERVAL_SECONDS)
                 continue
@@ -430,6 +482,10 @@ def run_production(registrar: CloudflareRegistrar) -> None:
 
             log("")
             log("Submitting REAL registration request NOW...")
+            notifier.send(
+                f"{domain} is registrable and passed safety checks. "
+                f"Submitting registration at ${price}."
+            )
 
             # This is the only place where the real purchase is attempted.
             registration = registrar.register_domain(domain)
@@ -449,6 +505,10 @@ def run_production(registrar: CloudflareRegistrar) -> None:
                     "Stopping to avoid duplicate billable "
                     "registration attempts."
                 )
+                notifier.send(
+                    f"Registration attempt for {domain} failed. "
+                    "The monitor stopped to prevent duplicate charges."
+                )
 
                 return
 
@@ -463,11 +523,15 @@ def run_production(registrar: CloudflareRegistrar) -> None:
                 log("SUCCESS!")
                 log(f"{domain} was registered successfully.")
                 log("=" * 60)
+                notifier.send(f"SUCCESS: {domain} was registered successfully.")
                 return
 
             if completed is True:
                 log(
                     f"Registration completed with state: {state}"
+                )
+                notifier.send(
+                    f"Registration for {domain} completed with state: {state}."
                 )
                 return
 
@@ -478,6 +542,10 @@ def run_production(registrar: CloudflareRegistrar) -> None:
 
             log(
                 "Stopping to avoid duplicate billable requests."
+            )
+            notifier.send(
+                f"Registration for {domain} was submitted with state: {state}. "
+                "The monitor stopped to prevent duplicate charges."
             )
 
             return
@@ -563,11 +631,12 @@ def main() -> None:
     registrar = CloudflareRegistrar(
         sandbox=args.sandbox
     )
+    notifier = TelegramNotifier()
 
     if args.sandbox:
-        run_sandbox(registrar)
+        run_sandbox(registrar, notifier)
     else:
-        run_production(registrar)
+        run_production(registrar, notifier)
 
 
 if __name__ == "__main__":

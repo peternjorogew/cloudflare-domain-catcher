@@ -12,6 +12,14 @@ CHECK_INTERVAL_SECONDS = 3
 AUTO_RENEW = True
 PRIVACY_MODE = "redaction"
 
+# Telegram alerts. Create a bot with @BotFather, send it /start, then fill in
+# the token and your private chat ID. Leave both values empty to disable alerts.
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID = ""
+
+# Send a heartbeat while the monitor is running.
+STATUS_INTERVAL_SECONDS = 3600
+
 
 # ---------------------------------------------------------
 # SANDBOX SETTINGS

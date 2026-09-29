@@ -55,6 +55,28 @@ python domain_catcher.py --sandbox
 
 Successful output ends with `SANDBOX TEST PASSED`. Sandbox requests do not register a real domain or charge money.
 
+## Telegram alerts
+
+Create a bot through [@BotFather](https://t.me/BotFather), open the bot, and send `/start`. Then add its token and your chat ID to your private `config.py`:
+
+```python
+TELEGRAM_BOT_TOKEN = "your_bot_token"
+TELEGRAM_CHAT_ID = "your_chat_id"
+STATUS_INTERVAL_SECONDS = 3600
+```
+
+The monitor sends a startup notice, a heartbeat every hour while the domain remains unavailable, and an immediate notification when it attempts or completes a registration. If the computer is offline, Telegram messages and availability checks resume once the connection returns.
+
+## Run automatically on macOS
+
+For restart-at-login and automatic recovery after an unexpected exit, install the included LaunchAgent after you have created `.venv` and tested Telegram:
+
+```bash
+./install_macos_launch_agent.sh
+```
+
+It starts after you log in and restarts the monitor if it exits. A laptop cannot run the monitor while asleep, powered off, or disconnected; use an always-on server if uninterrupted monitoring is required.
+
 ## Production mode
 
 Only after confirming your settings and completing a sandbox test:
