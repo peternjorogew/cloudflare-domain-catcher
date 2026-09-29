@@ -10,6 +10,8 @@ A small Python monitor that checks a domain's availability through Cloudflare Re
 - Rejects non-standard tiers, unexpected currencies, and prices above your limit.
 - Verifies the returned domain matches the domain requested.
 - Stops after submitting a registration to avoid duplicate purchases.
+- Sends Telegram updates when monitoring starts, every hour while it keeps
+  checking, and immediately for registration-related events.
 - Includes a Cloudflare Registrar Sandbox mode for end-to-end testing without a real registration.
 
 ## Requirements
@@ -55,7 +57,7 @@ python domain_catcher.py --sandbox
 
 Successful output ends with `SANDBOX TEST PASSED`. Sandbox requests do not register a real domain or charge money.
 
-## Telegram alerts
+## Telegram monitoring and alerts
 
 Create a bot through [@BotFather](https://t.me/BotFather), open the bot, and send `/start`. Then add its token and your chat ID to your private `config.py`:
 
@@ -65,7 +67,18 @@ TELEGRAM_CHAT_ID = "your_chat_id"
 STATUS_INTERVAL_SECONDS = 3600
 ```
 
-The monitor sends a startup notice, a heartbeat every hour while the domain remains unavailable, and an immediate notification when it attempts or completes a registration. If the computer is offline, Telegram messages and availability checks resume once the connection returns.
+The monitor checks Cloudflare at the interval set by
+`CHECK_INTERVAL_SECONDS` (three seconds in the example configuration). To
+avoid flooding your chat, it sends Telegram updates at these points:
+
+- when monitoring starts or restarts;
+- every hour while it continues checking (set by
+  `STATUS_INTERVAL_SECONDS`); and
+- immediately when a registration is attempted, completed, or stopped by a
+  safety check.
+
+If the computer or server is offline, availability checks and Telegram alerts
+resume once the connection returns.
 
 ## Run automatically on macOS
 

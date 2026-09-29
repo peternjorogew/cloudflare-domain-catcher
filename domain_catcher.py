@@ -369,7 +369,10 @@ def run_sandbox(
 
     result = registrar.register_domain(domain)
 
-    log(f"Cloudflare response: {result}")
+    log(
+        "Cloudflare sandbox response received "
+        f"(success={result.get('success')})."
+    )
 
     if not result.get("success"):
         raise RuntimeError(
@@ -492,7 +495,10 @@ def run_production(
             registration = registrar.register_domain(domain)
 
             log("")
-            log(f"Cloudflare response: {registration}")
+            log(
+                "Cloudflare registration response received "
+                f"(success={registration.get('success')})."
+            )
 
             if not registration.get("success"):
                 log("REGISTRATION FAILED.")
@@ -613,6 +619,9 @@ def run_production(
                 for condition in fatal_conditions
             ):
                 log("Fatal safety condition reached. Stopping.")
+                notifier.send(
+                    f"Monitoring {domain} stopped for safety: {message}"
+                )
                 return
 
         except Exception as exc:
