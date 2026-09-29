@@ -431,8 +431,15 @@ def run_production(
         f"I will report status every {STATUS_INTERVAL_SECONDS // 60} minutes."
     )
     next_status_at = time.monotonic() + STATUS_INTERVAL_SECONDS
+    last_status = "starting"
 
     while True:
+        if time.monotonic() >= next_status_at:
+            notifier.send(
+                f"Still monitoring {domain}. Last status: {last_status}."
+            )
+            next_status_at = time.monotonic() + STATUS_INTERVAL_SECONDS
+
         try:
             # Poll Cloudflare until the domain becomes registrable.
             domain_info = registrar.check_domain(domain)
@@ -442,18 +449,12 @@ def run_production(
                     "reason",
                     "domain unavailable"
                 )
+                last_status = f"unavailable ({reason})"
 
                 log(
                     f"{domain} unavailable "
                     f"({reason})"
                 )
-
-                if time.monotonic() >= next_status_at:
-                    notifier.send(
-                        f"Still monitoring {domain}. "
-                        f"Current status: unavailable ({reason})."
-                    )
-                    next_status_at = time.monotonic() + STATUS_INTERVAL_SECONDS
 
                 time.sleep(CHECK_INTERVAL_SECONDS)
                 continue
@@ -557,12 +558,14 @@ def run_production(
             return
 
         except requests.exceptions.Timeout:
+            last_status = "Cloudflare request timed out; retrying"
             log(
                 "Cloudflare request timed out. "
                 "Retrying availability check."
             )
 
         except requests.exceptions.ConnectionError:
+            last_status = "network connection error; retrying"
             log(
                 "Network connection error. "
                 "Retrying availability check."
@@ -578,6 +581,7 @@ def run_production(
                 f"HTTP error from Cloudflare "
                 f"(status={status_code}): {exc}"
             )
+            last_status = f"Cloudflare HTTP error (status={status_code}); retrying"
 
             # Slow down if Cloudflare rate-limits the script.
             if status_code == 429:
@@ -591,6 +595,7 @@ def run_production(
 
         except RuntimeError as exc:
             log(f"Safety/API error: {exc}")
+            last_status = f"Cloudflare safety/API error; retrying"
 
             message = str(exc)
 
@@ -611,6 +616,7 @@ def run_production(
                 return
 
         except Exception as exc:
+            last_status = f"unexpected {type(exc).__name__}; retrying"
             # Catch unexpected errors so one temporary issue
             # does not immediately kill the monitor.
             log(
